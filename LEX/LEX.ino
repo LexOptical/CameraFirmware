@@ -29,7 +29,9 @@ enum TIME_DISPLAY_MODE {
 };
 
 const float APERTURE_TABLE[] = { 1, 1.4, 2, 2.8, 4, 4.5, 5.6, 8, 11, 16, 22, 32, 45, 64, 90 }; // Array of aperture values
+const int APERTURES_COUNT = sizeof APERTURE_TABLE / sizeof APERTURE_TABLE[0];
 const float FILM_SENSITIVITY_TABLE[] = { 6, 12, 25, 50, 100, 200, 400, 800, 1600, 3200, 6400, 12800, 25600, 51200 }; // Array of sensitivity values
+const int SENSITIVITIES_COUNT = sizeof FILM_SENSITIVITY_TABLE / sizeof FILM_SENSITIVITY_TABLE[0];
 const int SLEEP_TIMEOUT = 30000;
 const int EXPOSURE_CALC_INTERVAL = 100;
 
@@ -101,8 +103,8 @@ void setup()
 
 void loadSettings()
 {
-    sensitivityIndex = EEPROM.read(0) > 14 ? 0 : EEPROM.read(0);
-    apertureIndex = EEPROM.read(1) > 15 ? 0 : EEPROM.read(1);
+    sensitivityIndex = EEPROM.read(0) > SENSITIVITIES_COUNT-1 ? 0 : EEPROM.read(0);
+    apertureIndex = EEPROM.read(1) > APERTURES_COUNT-1 ? 0 : EEPROM.read(1);
 }
 
 void writeSettings()
@@ -159,7 +161,7 @@ void onButtonPushed(int button)
             }
             break;
         case button_tr:
-            if (apertureIndex < 14) {
+            if (apertureIndex < APERTURES_COUNT-1) {
                 apertureIndex++;
             }
             break;
@@ -173,7 +175,7 @@ void onButtonPushed(int button)
             }
             break;
         case button_tr:
-            if (sensitivityIndex < 13) {
+            if (sensitivityIndex < SENSITIVITIES_COUNT-1) {
                 sensitivityIndex++;
             }
             break;
