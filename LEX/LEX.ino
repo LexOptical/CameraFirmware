@@ -212,7 +212,7 @@ void shootFrame(float exposureTimeSeconds)
                 return; // The user gave up before we could shoot the frame
             }
             accelgyro.getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
-            if (abs(gx) > 10 || abs(gy) > 10 || abs(gx) > 10) {
+            if (abs(gx) > 10 || abs(gy) > 10 || abs(gz) > 10) {
                 continue;
             } else {
                 break;
