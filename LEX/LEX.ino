@@ -191,14 +191,14 @@ void loop()
             timeSinceExposure = 0;
         }
         readButtons();
+        if (timeElapsed > SLEEP_TIMEOUT) {
+            onSleep();
+        }
     } else if (digitalRead(buttonShutter) == LOW) {
         onWake();
         delay(500);
     } else {
         LowPower.powerDown(SLEEP_60MS, ADC_OFF, BOD_OFF);
-    }
-    if (awake == true && timeElapsed > SLEEP_TIMEOUT) {
-        onSleep();
     }
 }
 
