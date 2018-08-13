@@ -185,7 +185,7 @@ void onButtonPushed(int button)
 void loop()
 {
     if (awake) {
-        if (timeSinceExposure > EXPOSURE_CALC_INTERVAL) {
+        if (!ael && timeSinceExposure > EXPOSURE_CALC_INTERVAL) {
             exposureDurationSeconds = calculateExposure();
             updateDisplay(exposureDurationSeconds);
             timeSinceExposure = 0;
@@ -321,9 +321,6 @@ uint16_t getLux()
 */
 float calculateExposure()
 {
-    if (ael) {
-        return;
-    }
     uint16_t lux = getLux();
     float currentISO = FILM_SENSITIVITY_TABLE[sensitivityIndex];
     float currentAperture = APERTURE_TABLE[apertureIndex];
