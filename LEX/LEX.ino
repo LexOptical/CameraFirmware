@@ -29,7 +29,7 @@ enum TIME_DISPLAY_MODE {
     OVERLOAD = 3
 };
 
-const float APERTURE_TABLE[] = { 1, 1.4, 2, 2.8, 4, 4.5, 5.6, 8, 11, 16, 22, 32, 45, 64, 90 }; // Array of aperture values
+const float APERTURE_TABLE[] = { 1, 1.4, 2, 2.8, 4, 5.6, 8, 11, 16, 22, 32, 45, 64, 90 }; // Array of aperture values
 const int APERTURES_COUNT = sizeof APERTURE_TABLE / sizeof APERTURE_TABLE[0];
 const float FILM_SENSITIVITY_TABLE[] = { 6, 12, 25, 50, 100, 200, 400, 800, 1600, 3200, 6400, 12800, 25600, 51200 }; // Array of sensitivity values
 const int SENSITIVITIES_COUNT = sizeof FILM_SENSITIVITY_TABLE / sizeof FILM_SENSITIVITY_TABLE[0];
@@ -424,7 +424,7 @@ void updateDisplay(float T)
     display.println(FILM_SENSITIVITY_TABLE[sensitivityIndex], 0);
     display.setCursor(76, 11);
     display.print("EV=");
-    Ev = log(pow(APERTURE_TABLE[apertureIndex], 2)) / log(2) + log(1 / T) / log(2);
+    Ev = apertureIndex + log(1 / T) / log(2);
     display.println(floor(Ev + 0.5), 1);
     display.setCursor(76, 22);
     display.print(lux, 1);
