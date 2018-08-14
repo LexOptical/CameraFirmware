@@ -330,11 +330,23 @@ float calculateExposure()
     return pow(currentAperture, 2) * 64 / (lux * currentISO); //T = exposure time, in seconds
 }
 
+/**
+   Base-2 logarithm, rounded to the nearest integer
+*/
+int roundedLog2(float x)
+{
+    int ex;
+    // The exponent returned by frexp() is the base-2 logarithm rounded up.
+    // Scaling by 1/sqrt(2) ensures round-to-nearest.
+    frexp(x * M_SQRT1_2, &ex);
+    return ex;
+}
+
 void updateDisplay(float T)
 {
     int timeDisplayMode; // State of shutter speed value display (fractional, seconds, minutes)
     int tFractionalDivisor; // Fractional time e.g. 1/1000, where tFractionalDivisor = 1000
-    float Ev; // Calculated Exposure Value
+    int Ev; // Calculated Exposure Value
     float Tmin; // Time in minutes
 
     if (T >= 60) {
@@ -424,8 +436,8 @@ void updateDisplay(float T)
     display.println(FILM_SENSITIVITY_TABLE[sensitivityIndex], 0);
     display.setCursor(76, 11);
     display.print("EV=");
-    Ev = log(pow(APERTURE_TABLE[apertureIndex], 2)) / log(2) + log(1 / T) / log(2);
-    display.println(floor(Ev + 0.5), 1);
+    Ev = roundedLog2(pow(APERTURE_TABLE[apertureIndex], 2) / T);
+    display.println(Ev);
     display.setCursor(76, 22);
     display.print(lux, 1);
     display.println("Lx");
