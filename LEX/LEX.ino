@@ -1,3 +1,4 @@
+#include <limits.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include <BH1750.h>
@@ -280,18 +281,18 @@ void deprimeShutters()
 */
 void fireShutters(float exposureTimeSeconds)
 {
-    int microseconds = exposureTimeSeconds * 1000000;
-    int milliseconds = exposureTimeSeconds * 1000;
+    unsigned int microseconds = exposureTimeSeconds * 1000000;
+    unsigned long milliseconds = exposureTimeSeconds * 1000;
     Serial.print("ms");
     Serial.println(milliseconds);
 
     digitalWrite(frontCurtainPin, LOW); // Drop front curtain
 
-    // if (microseconds > 16000) {
-    delay(milliseconds);
-    //} else {
-    //   delayMicroseconds(microseconds);
-    // }
+    if (milliseconds >= UINT_MAX / 1000) {
+        delay(milliseconds);
+    } else {
+        delayMicroseconds(microseconds);
+    }
 
     digitalWrite(rearCurtainPin, HIGH); // Drop rear curtain
     delay(10); // activation time time for coil
