@@ -61,16 +61,15 @@ int apertureIndex = 7; // Remember the last aperture value saved to EEPROM (addr
 uint16_t lux = 0;
 float exposureDurationSeconds;
 
-elapsedMillis timeElapsed; // How long it has been since something important happened
+elapsedMillis timeSinceInteraction; // How long it has been since something important happened
 elapsedMillis timeSinceExposure; // How long it has been we calculated exposure
 
 int16_t ax, ay, az;
 int16_t gx, gy, gz;
+int ax_offset,ay_offset,az_offset,gx_offset,gy_offset,gz_offset;
 
 void setup()
 {
-    loadSettings();
-
     pinMode(ledPin, OUTPUT);
 
     pinMode(rearCurtainPin, OUTPUT);
@@ -100,25 +99,44 @@ void setup()
     display.begin(SSD1306_SWITCHCAPVCC, 0x3C); // Initialize with the I2C addr 0x3C (for the 128x32 OLED)
     display.clearDisplay();
     display.display();
+
+    loadSettings();
 }
 
 void loadSettings()
 {
     sensitivityIndex = EEPROM.read(0) > SENSITIVITIES_COUNT-1 ? 0 : EEPROM.read(0);
     apertureIndex = EEPROM.read(1) > APERTURES_COUNT-1 ? 0 : EEPROM.read(1);
+    int start = 2;
+    int offset = 0;
+    EEPROM.get(start + (offset * sizeof(int)), gx_offset);
+    offset++;
+    EEPROM.get(start + (offset * sizeof(int)), gy_offset);
+    offset++;
+    EEPROM.get(start + (offset * sizeof(int)), gz_offset);
+    accelgyro.setXGyroOffset(gx_offset);
+    accelgyro.setYGyroOffset(gy_offset);
+    accelgyro.setZGyroOffset(gz_offset);
 }
 
 void writeSettings()
 {
     EEPROM.update(0, sensitivityIndex);
     EEPROM.update(1, apertureIndex);
+    int start = 2;
+    int offset = 0;
+    EEPROM.put(start + (offset * sizeof(int)), gx_offset);
+    offset++;
+    EEPROM.put(start + (offset * sizeof(int)), gy_offset);
+    offset++;
+    EEPROM.put(start + (offset * sizeof(int)), gz_offset);
 }
 
 void readButtons()
 {
     if (digitalRead(buttonShutter) == LOW) {
         shootFrame(exposureDurationSeconds);
-        timeElapsed = 0;
+        timeSinceInteraction = 0;
     }
 
     int buttonPushed = 0;
@@ -137,9 +155,8 @@ void readButtons()
 
     if (buttonPushed != 0) {
         onButtonPushed(buttonPushed);
-        writeSettings();
         delay(95);
-        timeElapsed = 0; // Keep awake if user is interacting
+        timeSinceInteraction = 0; // Keep awake if user is interacting
     }
 }
 
@@ -182,6 +199,16 @@ void onButtonPushed(int button)
             break;
         }
         break;
+    case DEBUG:
+     switch (button) {
+        case button_br:
+            calibration();
+            break;
+        case button_tr:
+            antishake = !antishake;
+            break;
+        }
+        break;
     }
 }
 
@@ -194,7 +221,7 @@ void loop()
             timeSinceExposure = 0;
         }
         readButtons();
-        if (timeElapsed > SLEEP_TIMEOUT) {
+        if (timeSinceInteraction > SLEEP_TIMEOUT) {
             onSleep();
         }
     } else if (digitalRead(buttonShutter) == LOW) {
@@ -209,13 +236,14 @@ void shootFrame(float exposureTimeSeconds)
 {
     primeShutters();
     if (antishake == true) {
+        int movementThreshold = 15; // TODO Calculate this from the focal length of the lens
         while (true) {
             if (digitalRead(buttonShutter) != LOW) {
                 deprimeShutters();
                 return; // The user gave up before we could shoot the frame
             }
             accelgyro.getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
-            if (abs(gx) > 10 || abs(gy) > 10 || abs(gz) > 10) {
+            if (abs(gx) > movementThreshold || abs(gy) > movementThreshold || abs(gz) > movementThreshold) {
                 continue;
             } else {
                 break;
@@ -302,15 +330,16 @@ void fireShutters(float exposureTimeSeconds)
 void onSleep()
 {
     deprimeShutters();
-    display.clearDisplay();
+    display.clearDisplay();   
     display.display();
+    writeSettings();
     awake = false;
 }
 
 void onWake()
 {
     awake = true;
-    timeElapsed = 0;
+    timeSinceInteraction = 0;
 }
 
 uint16_t getLux()
@@ -330,8 +359,33 @@ float calculateExposure()
     return pow(currentAperture, 2) * 64 / (lux * currentISO); //T = exposure time, in seconds
 }
 
+void debugDisplay(){
+    display.setCursor(0,0);
+    //display.print(lux, 1);
+    //display.println("Lx");
+    display.setTextWrap(true);
+    display.println(gx);
+    display.println(gy);
+    display.println(gz);
+    accelgyro.getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
+    if (abs(gx) > 150 || abs(gy) > 150 || abs(gz) > 150) {
+            display.print("Moving");
+    } else {
+            display.print("Static");
+    }
+    display.print(" antishake:");
+    display.print(antishake);
+
+    display.display();
+    display.clearDisplay();
+}
+
 void updateDisplay(float T)
 {
+    if (mode == DEBUG) {
+        return debugDisplay();
+    }
+
     int timeDisplayMode; // State of shutter speed value display (fractional, seconds, minutes)
     int tFractionalDivisor; // Fractional time e.g. 1/1000, where tFractionalDivisor = 1000
     float Ev; // Calculated Exposure Value
@@ -432,4 +486,117 @@ void updateDisplay(float T)
 
     display.display();
     display.clearDisplay();
+}
+
+
+
+int buffersize=1000;     //Amount of readings used to average, make it higher to get more precision but sketch will be slower  (default:1000)
+int acel_deadzone=80;     //Acelerometer error allowed, make it lower to get more precision, but sketch may not converge  (default:8)
+int giro_deadzone=100;     //Giro error allowed, make it lower to get more precision, but sketch may not converge  (default:1)
+int mean_ax,mean_ay,mean_az,mean_gx,mean_gy,mean_gz,state=0;
+
+void meansensors() {
+    long i=0,buff_ax=0,buff_ay=0,buff_az=0,buff_gx=0,buff_gy=0,buff_gz=0;
+
+    while (i<(buffersize+101)){
+        // read raw accel/gyro measurements from device
+        accelgyro.getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
+        
+        if (i>100 && i<=(buffersize+100)){ //First 100 measures are discarded
+        buff_ax=buff_ax+ax;
+        buff_ay=buff_ay+ay;
+        buff_az=buff_az+az;
+        buff_gx=buff_gx+gx;
+        buff_gy=buff_gy+gy;
+        buff_gz=buff_gz+gz;
+        }
+        if (i==(buffersize+100)){
+        mean_ax=buff_ax/buffersize;
+        mean_ay=buff_ay/buffersize;
+        mean_az=buff_az/buffersize;
+        mean_gx=buff_gx/buffersize;
+        mean_gy=buff_gy/buffersize;
+        mean_gz=buff_gz/buffersize;
+        }
+        i++;
+        delay(2); //Needed so we don't get repeated measures
+    }
+}
+
+void calibration() {
+
+    display.setTextSize(1);
+    display.setTextColor(WHITE);
+    display.setCursor(0, 0);
+    display.print("CALIBRATING, WAIT");
+    display.display();
+    display.clearDisplay();
+
+    ax_offset=-mean_ax/8;
+    ay_offset=-mean_ay/8;
+    az_offset=(16384-mean_az)/8;
+
+    gx_offset=-mean_gx/4;
+    gy_offset=-mean_gy/4;
+    gz_offset=-mean_gz/4;
+
+    while (true){
+        int ready=0;
+        accelgyro.setXAccelOffset(ax_offset);
+        accelgyro.setYAccelOffset(ay_offset);
+        accelgyro.setZAccelOffset(az_offset);
+
+        accelgyro.setXGyroOffset(gx_offset);
+        accelgyro.setYGyroOffset(gy_offset);
+        accelgyro.setZGyroOffset(gz_offset);
+
+        meansensors();
+
+        /*
+        if (abs(mean_ax)<=acel_deadzone) ready++;
+        else ax_offset=ax_offset-mean_ax/acel_deadzone;
+
+        if (abs(mean_ay)<=acel_deadzone) ready++;
+        else ay_offset=ay_offset-mean_ay/acel_deadzone;
+
+        if (abs(16384-mean_az)<=acel_deadzone) ready++;
+        else az_offset=az_offset+(16384-mean_az)/acel_deadzone;
+        */
+        
+        if (abs(mean_gx)<=giro_deadzone) ready++;
+        else gx_offset=gx_offset-mean_gx/(giro_deadzone+1);
+
+        if (abs(mean_gy)<=giro_deadzone) ready++;
+        else gy_offset=gy_offset-mean_gy/(giro_deadzone+1);
+
+        if (abs(mean_gz)<=giro_deadzone) ready++;
+        else gz_offset=gz_offset-mean_gz/(giro_deadzone+1);
+
+
+        display.setCursor(0, 0);
+        display.println("CALIBRATING, WAIT");
+        display.print(ready);
+        display.println(" ready");
+       /* 
+        display.print(ax_offset);
+        display.print(",");
+        display.print(ay_offset);
+        display.print(",");
+        display.println(az_offset);
+*/
+        display.print(gx_offset);
+        display.print(",");
+        display.print(gy_offset);
+        display.print(",");
+        display.println(gz_offset);
+
+        
+        display.display();
+        display.clearDisplay();
+
+        if (ready==3) break;
+
+
+    }
+    writeSettings();
 }
